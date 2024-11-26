@@ -22,11 +22,8 @@ RUN npm install --build-from-source
 # 6. Salin seluruh project ke container
 COPY . .
 
-# 7. Tentukan PORT default
-ENV PORT=8080
-
-# 8. Expose port untuk container
+# 7. Expose port untuk container
 EXPOSE 8080
 
-# 9. Jalankan aplikasi
+# 8. Jalankan aplikasi
 CMD ["node", "app.js"]
