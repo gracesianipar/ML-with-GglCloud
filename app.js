@@ -5,20 +5,25 @@ const moment = require('moment');
 const sharp = require('sharp');
 const path = require('path');
 const admin = require('firebase-admin');
-const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
-const client = new SecretManagerServiceClient();
+const serviceAccount = path.join(__dirname, 'config', 'submissionmlgc-gracesianipar-ab75553a34a5.json'); // pastikan path ini benar
 
-const loadSecret = async() => {
-    const [version] = await client.accessSecretVersion({
-        name: 'projects/574569072549/secrets/firebase-credentials',
+// Initialize Firebase only once
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
     });
-    const payload = version.payload.data.toString('utf8');
-    return JSON.parse(payload);
-};
+} else {
+    admin.app();
+}
 
-const loadModel = async() => {
+const db = admin.firestore();
+
+let model;
+
+// Load the model
+const loadModel = async () => {
     try {
-        const modelPath = path.join(__dirname, 'models', 'model.json');
+        const modelPath = path.join(__dirname, 'models', 'model.json'); // pastikan model berada di folder yang tepat
         model = await tf.loadGraphModel(`file://${modelPath}`);
         console.log('Model loaded successfully');
     } catch (error) {
@@ -27,34 +32,35 @@ const loadModel = async() => {
     }
 };
 
-const start = async() => {
+const predictImage = async (imageBuffer) => {
     try {
-        // Load service account credentials before initializing Firebase
-        const serviceAccount = await loadSecret();
+        const tensor = tf.node.decodeImage(imageBuffer, 3);
+        const resizedTensor = tf.image.resizeBilinear(tensor, [224, 224]);
+        const input = resizedTensor.expandDims(0).toFloat().div(tf.scalar(255));
 
-        // Initialize Firebase
-        if (!admin.apps.length) {
-            admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount),
-            });
-        } else {
-            admin.app();
-        }
+        const predictions = await model.predict(input);
+        const result = predictions.dataSync()[0] > 0.5 ? 'Cancer' : 'Non-cancer';
+        return result;
+    } catch (error) {
+        console.error('Error during prediction:', error.message);
+        return 'Error during prediction';
+    }
+};
 
-        const db = admin.firestore();
+const server = Hapi.server({
+    port: process.env.PORT || 8080, // Use dynamic port from environment variable
+    host: '0.0.0.0',
+    routes: {
+        cors: {
+            origin: ['*'],
+        },
+    },
+});
 
-        // Load model before starting the server
+const start = async () => {
+    try {
+        // Load model before starting server
         await loadModel();
-
-        const server = Hapi.server({
-            port: process.env.PORT || 8080, // Use dynamic port from environment variable
-            host: '0.0.0.0',
-            routes: {
-                cors: {
-                    origin: ['*'],
-                },
-            },
-        });
 
         server.route({
             method: 'POST',
@@ -67,7 +73,7 @@ const start = async() => {
                     output: 'stream',
                 },
             },
-            handler: async(request, h) => {
+            handler: async (request, h) => {
                 const { image } = request.payload;
 
                 if (!image) {
@@ -119,7 +125,7 @@ const start = async() => {
         server.route({
             method: 'GET',
             path: '/predict/histories',
-            handler: async(request, h) => {
+            handler: async (request, h) => {
                 try {
                     const snapshot = await db.collection('predictions').get();
 
