@@ -5,22 +5,17 @@ const moment = require('moment');
 const sharp = require('sharp');
 const path = require('path');
 const admin = require('firebase-admin');
-const serviceAccount = require('./config/submissionmlgc-gracesianipar-ab75553a34a5.json');
+const { SecretManagerServiceClient } = require('@google-cloud/secret-manager');
+const client = new SecretManagerServiceClient();
 
-// Initialize Firebase only once
-if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+const loadSecret = async() => {
+    const [version] = await client.accessSecretVersion({
+        name: 'projects/YOUR_PROJECT_ID/secrets/YOUR_SECRET_NAME/versions/latest',
     });
-} else {
-    admin.app();
-}
+    const payload = version.payload.data.toString('utf8');
+    return JSON.parse(payload);
+};
 
-const db = admin.firestore();
-
-let model;
-
-// Load the model
 const loadModel = async() => {
     try {
         const modelPath = path.join(__dirname, 'models', 'model.json');
@@ -32,35 +27,34 @@ const loadModel = async() => {
     }
 };
 
-const predictImage = async(imageBuffer) => {
-    try {
-        const tensor = tf.node.decodeImage(imageBuffer, 3);
-        const resizedTensor = tf.image.resizeBilinear(tensor, [224, 224]);
-        const input = resizedTensor.expandDims(0).toFloat().div(tf.scalar(255));
-
-        const predictions = await model.predict(input);
-        const result = predictions.dataSync()[0] > 0.5 ? 'Cancer' : 'Non-cancer';
-        return result;
-    } catch (error) {
-        console.error('Error during prediction:', error.message);
-        return 'Error during prediction';
-    }
-};
-
-const server = Hapi.server({
-    port: process.env.PORT || 8080, // Use dynamic port from environment variable
-    host: '0.0.0.0',
-    routes: {
-        cors: {
-            origin: ['*'],
-        },
-    },
-});
-
 const start = async() => {
     try {
-        // Load model before starting server
+        // Load service account credentials before initializing Firebase
+        const serviceAccount = await loadSecret();
+
+        // Initialize Firebase
+        if (!admin.apps.length) {
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount),
+            });
+        } else {
+            admin.app();
+        }
+
+        const db = admin.firestore();
+
+        // Load model before starting the server
         await loadModel();
+
+        const server = Hapi.server({
+            port: process.env.PORT || 8080, // Use dynamic port from environment variable
+            host: '0.0.0.0',
+            routes: {
+                cors: {
+                    origin: ['*'],
+                },
+            },
+        });
 
         server.route({
             method: 'POST',
