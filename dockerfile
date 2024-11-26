@@ -15,6 +15,8 @@ RUN npm install
 # 5. Salin semua file dari proyek Anda ke dalam container
 COPY . .
 
+ENV PORT=8080
+
 # 6. Expose port 3000 (sesuai dengan aplikasi Anda)
 EXPOSE 8080
 
