@@ -19,17 +19,18 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 let model;
+
+// Load the model
 const loadModel = async() => {
     try {
         const modelPath = path.join(__dirname, 'models', 'model.json');
         model = await tf.loadGraphModel(`file://${modelPath}`);
         console.log('Model loaded successfully');
     } catch (error) {
-        console.error('Error loading model:', error);
+        console.error('Error loading model:', error.message);
+        process.exit(1); // Exit process if model fails to load
     }
 };
-
-loadModel();
 
 const predictImage = async(imageBuffer) => {
     try {
@@ -41,13 +42,13 @@ const predictImage = async(imageBuffer) => {
         const result = predictions.dataSync()[0] > 0.5 ? 'Cancer' : 'Non-cancer';
         return result;
     } catch (error) {
-        console.error('Error during prediction:', error);
+        console.error('Error during prediction:', error.message);
         return 'Error during prediction';
     }
 };
 
 const server = Hapi.server({
-    port: 8080,
+    port: process.env.PORT || 8080, // Use dynamic port from environment variable
     host: '0.0.0.0',
     routes: {
         cors: {
@@ -58,6 +59,9 @@ const server = Hapi.server({
 
 const start = async() => {
     try {
+        // Load model before starting server
+        await loadModel();
+
         server.route({
             method: 'POST',
             path: '/predict',
@@ -66,7 +70,7 @@ const start = async() => {
                     maxBytes: 1000000, // 1MB limit for the uploaded file
                     parse: true,
                     multipart: true,
-                    output: 'stream', // This allows us to directly stream the uploaded file
+                    output: 'stream',
                 },
             },
             handler: async(request, h) => {
@@ -79,29 +83,18 @@ const start = async() => {
                     }).code(400);
                 }
 
-                // Log headers for debugging
-                console.log('Image headers:', image.hapi.headers);
-
-                // Check the image type and log it for debugging purposes
-                const mimeType = image.hapi ? image.hapi.headers['content-type'] : 'unknown';
-                console.log('Received image MIME type:', mimeType);
-
-                if (!mimeType.startsWith('image/')) {
-                    return h.response({
-                        status: 'fail',
-                        message: 'Invalid image file uploaded',
-                    }).code(400);
-                }
-
                 try {
-                    // Resize and process image with sharp
+                    const mimeType = image.hapi.headers['content-type'];
+                    if (!mimeType.startsWith('image/')) {
+                        return h.response({
+                            status: 'fail',
+                            message: 'Invalid image file uploaded',
+                        }).code(400);
+                    }
+
                     const imageBuffer = await sharp(image._data)
                         .resize(224, 224)
-                        .toBuffer()
-                        .catch(err => {
-                            console.error('Error processing image with sharp:', err);
-                            throw new Error('Invalid image data');
-                        });
+                        .toBuffer();
 
                     const result = await predictImage(imageBuffer);
                     const predictionId = uuidv4();
@@ -120,7 +113,7 @@ const start = async() => {
                         data: response,
                     }).code(200);
                 } catch (error) {
-                    console.error('Prediction error:', error);
+                    console.error('Prediction error:', error.message);
                     return h.response({
                         status: 'fail',
                         message: 'Terjadi kesalahan dalam melakukan prediksi',
@@ -145,7 +138,6 @@ const start = async() => {
 
                     const histories = snapshot.docs.map((doc) => {
                         const data = doc.data();
-                        // Jika createdAt adalah timestamp Firestore, konversi ke format ISO string
                         if (data.createdAt && data.createdAt._seconds) {
                             data.createdAt = new Date(data.createdAt._seconds * 1000).toISOString();
                         }
@@ -154,8 +146,6 @@ const start = async() => {
                             history: data,
                         };
                     });
-
-                    console.log('Histories:', histories);
 
                     return h.response({
                         status: 'success',
@@ -174,7 +164,7 @@ const start = async() => {
         await server.start();
         console.log('Server running on', server.info.uri);
     } catch (err) {
-        console.log(err);
+        console.error('Server error:', err.message);
         process.exit(1);
     }
 };
