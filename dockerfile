@@ -21,8 +21,6 @@ COPY . .
 
 COPY ./config/submissionmlgc-gracesianipar-ab75553a34a5.json ./config/
 
-HEALTHCHECK CMD curl --fail http://localhost:8080 || exit 1
-
 ENV PORT=8080
 
 # 6. Expose port 3000 (sesuai dengan aplikasi Anda)
