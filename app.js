@@ -10,7 +10,7 @@ const client = new SecretManagerServiceClient();
 
 const loadSecret = async() => {
     const [version] = await client.accessSecretVersion({
-        name: 'projects/YOUR_PROJECT_ID/secrets/YOUR_SECRET_NAME/versions/latest',
+        name: 'projects/574569072549/secrets/firebase-credentials',
     });
     const payload = version.payload.data.toString('utf8');
     return JSON.parse(payload);
