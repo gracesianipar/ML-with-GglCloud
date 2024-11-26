@@ -143,7 +143,19 @@ const start = async() => {
                         }).code(200);
                     }
 
-                    const histories = snapshot.docs.map((doc) => (doc.data()));
+                    const histories = snapshot.docs.map((doc) => {
+                        const data = doc.data();
+                        // Jika createdAt adalah timestamp Firestore, konversi ke format ISO string
+                        if (data.createdAt && data.createdAt._seconds) {
+                            data.createdAt = new Date(data.createdAt._seconds * 1000).toISOString();
+                        }
+                        return {
+                            id: doc.id,
+                            history: data,
+                        };
+                    });
+
+                    console.log('Histories:', histories);
 
                     return h.response({
                         status: 'success',
