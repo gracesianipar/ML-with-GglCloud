@@ -1,25 +1,32 @@
-FROM node:18
+# 1. Gunakan base image Node.js versi Linux
+FROM node:18-slim
 
-# Install TensorFlow dependencies
+# 2. Instal library yang dibutuhkan
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    python3 \
+    curl \
     libglib2.0-0 \
     libsm6 \
     libxrender1 \
-    libxext6
+    libxext6 \
+    && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# 3. Tentukan direktori kerja
 WORKDIR /app
 
-# Copy project files
+# 4. Salin file package.json dan package-lock.json
 COPY package*.json ./
-RUN npm install
 
+# 5. Install dependensi secara eksplisit
+RUN npm install --build-from-source
+
+# 6. Salin seluruh project ke container
 COPY . .
 
-# Expose port
+# 7. Tentukan PORT default
+ENV PORT=8080
+
+# 8. Expose port untuk container
 EXPOSE 8080
 
-# Run app
+# 9. Jalankan aplikasi
 CMD ["node", "app.js"]
