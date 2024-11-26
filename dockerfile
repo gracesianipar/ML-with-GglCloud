@@ -22,8 +22,11 @@ RUN npm install --build-from-source
 # 6. Salin seluruh project ke container
 COPY . .
 
-# 7. Expose port untuk container
+# 7. Verifikasi file di dalam container
+RUN ls -R /app
+
+# 8. Expose port untuk container
 EXPOSE 8080
 
-# 8. Jalankan aplikasi
+# 9. Jalankan aplikasi
 CMD ["node", "app.js"]
